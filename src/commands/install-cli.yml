@@ -7,8 +7,15 @@ parameters:
   download-path:
     type: string
     default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
+  cache-version:
+    description: Cache version; increment this for a fresh cache
+    type: string
 
 steps:
+  - restore_cache:
+      name: restoring cached sonar-scanner CLI
+      key: &cache-key sonar-scanner-v<<parameters.cli-version>>-<<parameters.cache-version>>
+      when: always
   - run:
       name: "SonarCloud: Install sonar-scanner CLI"
       command: |
@@ -34,3 +41,8 @@ steps:
         source $BASH_ENV
         sonar-scanner --version
       when: always
+  - save_cache:
+      name: Caching sonar-scanner CLI
+      key: *cache-key
+      paths:
+        - /tmp/sonar-scanner
