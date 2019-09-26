@@ -1,0 +1,36 @@
+description: Install sonar-scanner CLI
+
+parameters:
+  cli-version:
+    type: string
+    default: 4.1.0.1829
+  download-path:
+    type: string
+    default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
+
+steps:
+  - run:
+      name: "SonarCloud: Install sonar-scanner CLI"
+      command: |
+        CLI_FILENAME="sonar-scanner-cli-<<parameters.cli-version>>-linux"
+        DOWNLOAD_PATH="<<parameters.download-path>>"
+
+        export UTILS_TO_INSTALL=""
+        hash jq 2>/dev/null || { UTILS_TO_INSTALL="${UTILS_TO_INSTALL} jq"; }
+        hash unzip 2>/dev/null || { UTILS_TO_INSTALL="${UTILS_TO_INSTALL} unzip"; }
+
+        if [ "$UTILS_TO_INSTALL" ]; then
+          apt-get update -y
+          apt-get install -y --no-install-recommends $UTILS_TO_INSTALL
+        fi
+
+        if test ! -d /tmp/sonar-scanner; then
+          wget $DOWNLOAD_PATH$CLI_FILENAME.zip
+          unzip $CLI_FILENAME.zip
+          rm $CLI_FILENAME.zip
+          mv $CLI_FILENAME /tmp/sonar-scanner
+        fi
+        echo "export PATH=/tmp/sonar-scanner/bin:$PATH" >> $BASH_ENV
+        source $BASH_ENV
+        sonar-scanner --version
+      when: always

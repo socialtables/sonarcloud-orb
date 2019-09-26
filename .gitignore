@@ -1,0 +1,6 @@
+.vscode
+*.orig
+processed.yml
+dist
+*.log
+.DS_Store
