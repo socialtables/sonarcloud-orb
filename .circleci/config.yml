@@ -16,8 +16,7 @@ jobs:
   test-commands:
     executor: orb-tools/alpine
     steps:
-      - sonarcloud/install-cli:
-          cache-version: 0
+      - run: echo "RUNNING FAKE COMMAND TESTS"
 
 # yaml anchor filters
 integration-dev_filters: &integration-dev_filters
