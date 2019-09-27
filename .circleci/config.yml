@@ -32,7 +32,7 @@ jobs:
           os: <<parameters.os>>
           output-file: <<parameters.version-check-file>>
           no-cache: true
-      - run: grep "SonarQube Scanner <<parameters.cli-version>>"
+      - run: grep "SonarQube Scanner <<parameters.cli-version>>" <<parameters.version-check-file>>
       - run:
           name: Cleanup test files
           command: rm <<parameters.version-check-file>>
