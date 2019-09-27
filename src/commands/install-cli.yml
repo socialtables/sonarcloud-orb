@@ -19,8 +19,8 @@ steps:
   - run:
       name: "SonarCloud: Install sonar-scanner CLI"
       command: |
-        CLI_FILENAME="sonar-scanner-cli-<<parameters.cli-version>>-linux"
-        DOWNLOAD_PATH="<<parameters.download-path>>"
+        CLI_VERSION="<<parameters.cli-version>>"
+        DOWNLOAD_URL="<<parameters.download-path>>sonar-scanner-cli-$CLI_VERSION-linux.zip"
 
         export UTILS_TO_INSTALL=""
         hash jq 2>/dev/null || { UTILS_TO_INSTALL="${UTILS_TO_INSTALL} jq"; }
@@ -32,10 +32,10 @@ steps:
         fi
 
         if test ! -d /tmp/sonar-scanner; then
-          wget $DOWNLOAD_PATH$CLI_FILENAME.zip
-          unzip $CLI_FILENAME.zip
-          rm $CLI_FILENAME.zip
-          mv $CLI_FILENAME /tmp/sonar-scanner
+          wget $DOWNLOAD_URL -O /tmp/sonar-scanner.zip
+          unzip /tmp/sonar-scanner.zip -d /tmp
+          rm /tmp/sonar-scanner.zip
+          mv /tmp/sonar-scanner-$CLI_VERSION-linux /tmp/sonar-scanner
         fi
         echo "export PATH=/tmp/sonar-scanner/bin:$PATH" >> $BASH_ENV
         source $BASH_ENV
