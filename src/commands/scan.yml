@@ -41,7 +41,7 @@ steps:
   - run:
       name: "SonarCloud: Should run scan?"
       command: |
-        if [ ! -z "$CIRCLE_PULL_REQUEST" ] && [ ! -z "$CIRCLE_BRANCH" ]; then
+        if [ -z "$CIRCLE_PULL_REQUEST" ] && [ -z "$CIRCLE_BRANCH" ]; then
           circleci-agent step halt
         fi
   - install-cli:
