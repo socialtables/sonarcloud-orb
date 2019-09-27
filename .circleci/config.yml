@@ -52,11 +52,11 @@ integration-master_filters: &integration-master_filters
     only: /rc-.*/
 
 test-commands-dev: &test-commands-dev
-  - test-install-cli-alpine-dev
+  # - test-install-cli-alpine-dev
   - test-install-cli-ubuntu-dev
 
 test-commands-master: &test-commands-master
-  - test-install-cli-alpine-master
+  # - test-install-cli-alpine-master
   - test-install-cli-ubuntu-master
 
 workflows:
@@ -119,12 +119,12 @@ workflows:
       # - only commits to master should potentially trigger a prod release
 
       # triggered by non-master branch commits
-      - test-install-cli:
-          name: test-install-cli-alpine-dev
-          cli-version: 4.0.0.1744
-          os: linux
-          executor: orb-tools/alpine
-          filters: *integration-dev_filters
+      # - test-install-cli:
+      #     name: test-install-cli-alpine-dev
+      #     cli-version: 4.0.0.1744
+      #     os: linux
+      #     executor: orb-tools/alpine
+      #     filters: *integration-dev_filters
 
       - test-install-cli:
           name: test-install-cli-ubuntu-dev
@@ -134,12 +134,12 @@ workflows:
           filters: *integration-dev_filters
 
       # triggered by master branch commits
-      - test-install-cli:
-          name: test-install-cli-alpine-master
-          cli-version: 4.0.0.1744
-          os: linux
-          executor: orb-tools/alpine
-          filters: *integration-master_filters
+      # - test-install-cli:
+      #     name: test-install-cli-alpine-master
+      #     cli-version: 4.0.0.1744
+      #     os: linux
+      #     executor: orb-tools/alpine
+      #     filters: *integration-master_filters
 
       - test-install-cli:
           name: test-install-cli-ubuntu-master
