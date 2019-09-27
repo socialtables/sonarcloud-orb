@@ -26,6 +26,9 @@ parameters:
       Provide a file path (absolute or relative to /tmp), to write CLI version check info for testing
     type: string
     default: ""
+  steps:
+    type: steps
+    default: []
 steps:
   - unless:
       condition: <<parameters.no-cache>>
@@ -63,6 +66,7 @@ steps:
           <<#parameters.output-file>>| tee <<parameters.output-file>><</parameters.output-file>>;
 
       when: always
+  - <<parameters.steps>>
   - unless:
       condition: <<parameters.no-cache>>
       steps:
