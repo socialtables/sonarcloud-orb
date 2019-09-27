@@ -160,7 +160,7 @@ workflows:
 
       - trigger-major-release:
           type: approval
-          rrequires: *test-commands-master
+          requires: *test-commands-master
           filters: *integration-master_filters
 
       # patch, minor, or major publishing
