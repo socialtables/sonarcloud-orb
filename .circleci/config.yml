@@ -8,6 +8,7 @@ orbs:
   orb-tools: circleci/orb-tools@8
   queue: eddiewebb/queue@1
 
+
 references:
   orb-name: &orb-name socialtables/sonarcloud
   ssh-fingerprints: &ssh-fingerprints e5:7b:2a:ab:8a:c8:9d:38:c3:2b:8d:4a:64:5e:7b:40
