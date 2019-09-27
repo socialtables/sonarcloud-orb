@@ -1,24 +1,201 @@
 version: 2.1
 
+# add your orb below, to be used in integration tests (note: a @dev:alpha
+# release must exist; you'll need to publish manually at least once)
+# you can use scripts/publish-alpha.sh to publish a @dev:alpha release
 orbs:
-  orb-tools: circleci/orb-tools@8.27.3
-  shellcheck: circleci/shellcheck@1.3.14
+  sonarcloud-alpha: socialtables/sonarcloud@dev:alpha
+  orb-tools: circleci/orb-tools@8
+  queue: eddiewebb/queue@1
+
+
+references:
+  orb-name: &orb-name socialtables/sonarcloud
+  ssh-fingerprints: &ssh-fingerprints e5:7b:2a:ab:8a:c8:9d:38:c3:2b:8d:4a:64:5e:7b:40
 
 jobs:
-  getting-started:
-    docker:
-      - image: circleci/node
+  test-install-cli:
+    parameters:
+      executor:
+        type: executor
+      version-check-file:
+        type: string
+        default: /tmp/scanner-version-check.txt
+      cli-version:
+        type: string
+      os:
+        type: string
+    executor: <<parameters.executor>>
     steps:
+      - sonarcloud-alpha/install-cli:
+          cli-version: <<parameters.cli-version>>
+          os: <<parameters.os>>
+          output-file: <<parameters.version-check-file>>
+          no-cache: true
+      - run: grep "SonarQube Scanner <<parameters.cli-version>>" <<parameters.version-check-file>>
       - run:
-          name: Getting Started
-          command: |
-            echo "Your orb is now building on CircleCI"
-            echo "This is a temporary configuration file. Continue with the orb-init.sh script and follow the README.md to publish your orb."
-workflows:
-  setup:
-    jobs:
-      - getting-started
-      - orb-tools/lint
-      - shellcheck/check:
-          ignore: 'SC1090,SC2034,SC2059,SC2001,SC2143,SC2046'
+          name: Cleanup test files
+          command: rm <<parameters.version-check-file>>
+          when: always
 
+# yaml anchor filters
+integration-dev_filters: &integration-dev_filters
+  branches:
+    ignore: /.*/
+  tags:
+    only: /integration-.*/
+
+integration-master_filters: &integration-master_filters
+  branches:
+    ignore: /.*/
+  tags:
+    only: /rc-.*/
+
+test-commands-dev: &test-commands-dev
+  # - test-install-cli-alpine-dev
+  - test-install-cli-ubuntu-dev
+
+test-commands-master: &test-commands-master
+  # - test-install-cli-alpine-master
+  - test-install-cli-ubuntu-master
+
+workflows:
+  lint-pack_validate_publish-dev:
+    jobs:
+      - orb-tools/lint:
+          name: lint
+
+      - orb-tools/pack:
+          name: pack
+          requires:
+            - lint
+
+      - orb-tools/publish-dev:
+          name: publish-dev
+          context: orbs-dev
+          orb-name: *orb-name
+          publish-branch-sha-version: true
+          requires:
+            - pack
+
+      - queue/block_workflow:
+          name: block-workflow
+          context: orbs-dev
+          requires:
+            - publish-dev
+
+      - orb-tools/trigger-integration-workflow:
+          name: trigger-integration-dev
+          ssh-fingerprints: *ssh-fingerprints
+          use-git-diff: false
+          cleanup-tags: true
+          requires:
+            - block-workflow
+          filters:
+            branches:
+              ignore: master
+
+      - orb-tools/trigger-integration-workflow:
+          name: trigger-integration-master
+          ssh-fingerprints: *ssh-fingerprints
+          use-git-diff: false
+          cleanup-tags: true
+          tag: rc
+          requires:
+            - block-workflow
+          filters:
+            branches:
+              only: master
+
+  # this `integration-tests_prod-release` workflow will ignore commits
+  # it is only triggered by git tags, which are created in the job above
+  integration-tests_prod-release:
+    jobs:
+      # - your integration test jobs go here
+      # - you will want to call each integration testing job twice,
+      # - each under a different name:
+      # - once, for integration tests triggered by non-master-branch commits
+      # - and again, for tests triggered by commits to master
+      # - only commits to master should potentially trigger a prod release
+
+      # triggered by non-master branch commits
+      # - test-install-cli:
+      #     name: test-install-cli-alpine-dev
+      #     cli-version: 4.0.0.1744
+      #     os: linux
+      #     executor: orb-tools/alpine
+      #     filters: *integration-dev_filters
+
+      - test-install-cli:
+          name: test-install-cli-ubuntu-dev
+          cli-version: 4.0.0.1744
+          os: linux
+          executor: orb-tools/ubuntu
+          filters: *integration-dev_filters
+
+      # triggered by master branch commits
+      # - test-install-cli:
+      #     name: test-install-cli-alpine-master
+      #     cli-version: 4.0.0.1744
+      #     os: linux
+      #     executor: orb-tools/alpine
+      #     filters: *integration-master_filters
+
+      - test-install-cli:
+          name: test-install-cli-ubuntu-master
+          cli-version: 4.0.0.1744
+          os: linux
+          executor: orb-tools/ubuntu
+          filters: *integration-master_filters
+
+      - trigger-patch-release:
+          type: approval
+          requires: *test-commands-master
+          filters: *integration-master_filters
+
+      - trigger-minor-release:
+          type: approval
+          requires: *test-commands-master
+          filters: *integration-master_filters
+
+      - trigger-major-release:
+          type: approval
+          rrequires: *test-commands-master
+          filters: *integration-master_filters
+
+      # patch, minor, or major publishing
+      - orb-tools/dev-promote-prod:
+          name: dev-promote-patch
+          release: patch
+          context: orbs-publishing
+          cleanup-tags: true
+          cleanup-tags-pattern: rc-*
+          orb-name: *orb-name
+          ssh-fingerprints: *ssh-fingerprints
+          requires:
+            - trigger-patch-release
+          filters: *integration-master_filters
+
+      - orb-tools/dev-promote-prod:
+          name: dev-promote-minor
+          release: minor
+          context: orbs-publishing
+          cleanup-tags: true
+          cleanup-tags-pattern: rc-*
+          orb-name: *orb-name
+          ssh-fingerprints: *ssh-fingerprints
+          requires:
+            - trigger-minor-release
+          filters: *integration-master_filters
+
+      - orb-tools/dev-promote-prod:
+          name: dev-promote-major
+          release: major
+          context: orbs-publishing
+          cleanup-tags: true
+          cleanup-tags-pattern: rc-*
+          orb-name: *orb-name
+          ssh-fingerprints: *ssh-fingerprints
+          requires:
+            - trigger-major-release
+          filters: *integration-master_filters

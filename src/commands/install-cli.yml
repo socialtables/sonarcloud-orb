@@ -1,0 +1,73 @@
+description: Install sonar-scanner CLI
+
+parameters:
+  cli-version:
+    type: string
+    default: 4.1.0.1829
+  download-path:
+    type: string
+    default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
+  os:
+    type: enum
+    enum:
+      - linux
+      - windows
+      - macosx
+    default: linux
+  cache-version:
+    description: Cache version; increment this for a fresh cache
+    type: string
+    default: "0"
+  no-cache:
+    type: boolean
+    default: false
+  output-file:
+    description: >
+      Provide a file path (absolute or relative to /tmp), to write CLI version check info for testing
+    type: string
+    default: ""
+steps:
+  - unless:
+      condition: <<parameters.no-cache>>
+      steps:
+        - restore_cache:
+            name: restoring cached sonar-scanner CLI
+            key: &cache-key sonar-scanner-v<<parameters.cli-version>>-{{arch}}-<<parameters.cache-version>>
+            when: always
+  - run:
+      name: "SonarCloud: Install sonar-scanner CLI"
+      command: |
+        CLI_VERSION="<<parameters.cli-version>>"
+        CLI_OS="<<parameters.os>>"
+        DOWNLOAD_URL="<<parameters.download-path>>sonar-scanner-cli-$CLI_VERSION-$CLI_OS.zip"
+
+        export UTILS_TO_INSTALL=""
+        hash jq 2>/dev/null || { UTILS_TO_INSTALL="${UTILS_TO_INSTALL} jq"; }
+        hash unzip 2>/dev/null || { UTILS_TO_INSTALL="${UTILS_TO_INSTALL} unzip"; }
+
+        if [ "$UTILS_TO_INSTALL" ]; then
+          apt-get update -y
+          apt-get install -y --no-install-recommends $UTILS_TO_INSTALL
+        fi
+
+        if test ! -d /tmp/sonar-scanner; then
+          wget $DOWNLOAD_URL -O /tmp/sonar-scanner.zip
+          unzip /tmp/sonar-scanner.zip -d /tmp
+          rm /tmp/sonar-scanner.zip
+          mv /tmp/sonar-scanner-$CLI_VERSION-$CLI_OS /tmp/sonar-scanner
+        fi
+        echo "export PATH=/tmp/sonar-scanner/bin:$PATH" >> $BASH_ENV
+        source $BASH_ENV
+
+        sonar-scanner --version \
+          <<#parameters.output-file>>| tee <<parameters.output-file>><</parameters.output-file>>;
+
+      when: always
+  - unless:
+      condition: <<parameters.no-cache>>
+      steps:
+        - save_cache:
+            name: Caching sonar-scanner CLI
+            key: *cache-key
+            paths:
+              - /tmp/sonar-scanner

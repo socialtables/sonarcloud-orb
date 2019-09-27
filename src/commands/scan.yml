@@ -1,0 +1,115 @@
+description: "Run SonarCloud scanning (node.js projects only). This should be the last command in the job that invokes it."
+
+parameters:
+  project-key:
+    type: string
+  organization:
+    type: string
+    default: socialtables
+  host-url:
+    type: string
+    default: https://sonarcloud.io/
+  scm-revision:
+    type: env_var_name
+    default: CIRCLE_SHA1
+  build-string:
+    type: env_var_name
+    default: CIRCLE_BUILD_URL
+  sonar-login:
+    type: env_var_name
+    default: SONARCLOUD_TOKEN
+  github-project-slug:
+    type: string
+  github-username:
+    type: string
+    default: socialtables-deployer
+  github-api-token:
+    type: env_var_name
+    default: GITHUB_SOCIALTABLES_DEPLOYER_TOKEN
+  cli-version:
+    type: string
+    default: 4.1.0.1829
+  cli-download-path:
+    type: string
+    default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
+  cache-version:
+    description: Cache version; increment this for a fresh cache
+    type: string
+    default: "0"
+
+steps:
+  - run:
+      name: "SonarCloud: Should run scan?"
+      command: |
+        if [ ! -z "$CIRCLE_PULL_REQUEST" ] && [ ! -z "$CIRCLE_BRANCH" ]; then
+          circleci-agent step halt
+        fi
+  - install-cli:
+      cli-version: <<parameters.cli-version>>
+      download-path: <<parameters.cli-download-path>>
+      cache-version: <<parameters.cache-version>>
+  - run:
+      name: "SonarCloud: Scan"
+      command: |
+        SONAR_PROJECT_KEY="<<parameters.project-key>>"
+        SONAR_ORGANIZATION="<<parameters.organization>>"
+        SONAR_HOST_URL="<<parameters.host-url>>"
+        SONAR_SCM_REVISION="${<<parameters.scm-revision>>}"
+        SONAR_BUILD_STRING="${<<parameters.build-string>>}"
+        SONAR_LOGIN="${<<parameters.sonar-login>>}"
+        GITHUB_PROJECT_SLUG="<<parameters.github-project-slug>>"
+        GITHUB_USERNAME="<<parameters.github-username>>"
+        GITHUB_API_TOKEN="${<<parameters.github-api-token>>}"
+
+        GITHUB_API_CREDENTIAL="$GITHUB_USERNAME:$GITHUB_API_TOKEN"
+        SONAR_PROJECT_VERSION=$(cat package.json | jq -r '.version')
+
+        SONAR_PULLREQUEST=""
+        SONAR_BRANCHES=""
+
+        if [ "$CIRCLE_PULL_REQUEST" ]; then
+          echo "USING PR: $CIRCLE_PULL_REQUEST"
+          SONAR_PR_KEY=$(basename $CIRCLE_PULL_REQUEST)
+
+          echo "SONAR_PR_KEY: $SONAR_PR_KEY"
+          PR_BASE_BRANCH=$(curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG/pulls/$SONAR_PR_KEY | jq -r '.base.ref')
+          echo "PR_BASE_BRANCH: $PR_BASE_BRANCH"
+
+          SONAR_PULLREQUEST="${SONAR_PULLREQUEST} --define sonar.pullrequest.base=${PR_BASE_BRANCH}"
+          SONAR_PULLREQUEST="${SONAR_PULLREQUEST} --define sonar.pullrequest.branch=${CIRCLE_BRANCH}"
+          SONAR_PULLREQUEST="${SONAR_PULLREQUEST} --define sonar.pullrequest.key=${SONAR_PR_KEY}"
+
+          git branch -f $PR_BASE_BRANCH origin/$PR_BASE_BRANCH
+
+        else
+          if [ "$CIRCLE_BRANCH" ]; then
+            GITHUB_DEFAULT_BRANCH=$(curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG | jq -r '.default_branch')
+            echo "GITHUB_DEFAULT_BRANCH: $GITHUB_DEFAULT_BRANCH"
+
+            SONAR_BRANCHES="${SONAR_BRANCHES} --define sonar.branch.name=${CIRCLE_BRANCH}"
+
+            if [ "$CIRCLE_BRANCH" != "$GITHUB_DEFAULT_BRANCH" ]; then
+              SONAR_BRANCHES="${SONAR_BRANCHES} --define sonar.branch.target=${GITHUB_DEFAULT_BRANCH}"
+
+              git branch -f $GITHUB_DEFAULT_BRANCH origin/$GITHUB_DEFAULT_BRANCH
+            fi
+          fi
+        fi
+
+        echo "SONAR_PULLREQUEST -> $SONAR_PULLREQUEST"
+        echo "SONAR_BRANCHES -> $SONAR_BRANCHES"
+
+        if [ ! -z "$SONAR_PULLREQUEST" ] || [ ! -z "$SONAR_BRANCHES" ]; then
+          export SONAR_SCANNER_OPTS="-server"
+          sonar-scanner \
+            --define sonar.host.url="$SONAR_HOST_URL" \
+            --define sonar.organization="$SONAR_ORGANIZATION" \
+            --define sonar.buildString="$SONAR_BUILD_STRING" \
+            --define sonar.scm.revision="$SONAR_SCM_REVISION" \
+            --define sonar.projectKey="$SONAR_PROJECT_KEY" \
+            --define sonar.projectVersion="$SONAR_PROJECT_VERSION" \
+            $SONAR_PULLREQUEST \
+            $SONAR_BRANCHES \
+            --define sonar.login="$SONAR_LOGIN"
+        fi
+      when: always
