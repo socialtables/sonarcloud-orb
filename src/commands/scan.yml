@@ -1,4 +1,4 @@
-description: "Run SonarCloud scanning (node.js projects only)"
+description: "Run SonarCloud scanning (node.js projects only). This should be the last command in the job that invokes it."
 
 parameters:
   project-key:
@@ -35,8 +35,15 @@ parameters:
   cache-version:
     description: Cache version; increment this for a fresh cache
     type: string
+    default: "0"
 
 steps:
+  - run:
+      name: "SonarCloud: Should run scan?"
+      command: |
+        if [ ! -z "$CIRCLE_PULL_REQUEST" ] && [ ! -z "$CIRCLE_BRANCH" ]; then
+          circleci-agent step halt
+        fi
   - install-cli:
       cli-version: <<parameters.cli-version>>
       download-path: <<parameters.cli-download-path>>

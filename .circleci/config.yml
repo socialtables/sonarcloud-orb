@@ -4,7 +4,7 @@ version: 2.1
 # release must exist; you'll need to publish manually at least once)
 # you can use scripts/publish-alpha.sh to publish a @dev:alpha release
 orbs:
-  sonarcloud: socialtables/sonarcloud@dev:alpha
+  sonarcloud-alpha: socialtables/sonarcloud@dev:alpha
   orb-tools: circleci/orb-tools@8
   queue: eddiewebb/queue@1
 
@@ -13,10 +13,29 @@ references:
   ssh-fingerprints: &ssh-fingerprints e5:7b:2a:ab:8a:c8:9d:38:c3:2b:8d:4a:64:5e:7b:40
 
 jobs:
-  test-commands:
-    executor: orb-tools/alpine
+  test-install-cli:
+    parameters:
+      executor:
+        type: executor
+      version-check-file:
+        type: string
+        default: /tmp/scanner-version-check.txt
+      cli-version:
+        type: string
+      os:
+        type: string
+    executor: <<parameters.executor>>
     steps:
-      - run: echo "RUNNING FAKE COMMAND TESTS"
+      - sonarcloud-alpha/install-cli:
+          cli-version: <<parameters.cli-version>>
+          os: <<parameters.os>>
+          output-file: <<parameters.version-check-file>>
+          no-cache: true
+      - run: grep "SonarQube Scanner <<parameters.cli-version>>"
+      - run:
+          name: Cleanup test files
+          command: rm <<parameters.version-check-file>>
+          when: always
 
 # yaml anchor filters
 integration-dev_filters: &integration-dev_filters
@@ -30,6 +49,14 @@ integration-master_filters: &integration-master_filters
     ignore: /.*/
   tags:
     only: /rc-.*/
+
+test-commands-dev: &test-commands-dev
+  - test-install-cli-alpine-dev
+  - test-install-cli-ubuntu-dev
+
+test-commands-master: &test-commands-master
+  - test-install-cli-alpine-master
+  - test-install-cli-ubuntu-master
 
 workflows:
   lint-pack_validate_publish-dev:
@@ -91,31 +118,48 @@ workflows:
       # - only commits to master should potentially trigger a prod release
 
       # triggered by non-master branch commits
-      - test-commands:
-          name: test-commands-dev
+      - test-install-cli:
+          name: test-install-cli-alpine-dev
+          cli-version: 4.0.0.1744
+          os: linux
+          executor: orb-tools/alpine
+          filters: *integration-dev_filters
+
+      - test-install-cli:
+          name: test-install-cli-ubuntu-dev
+          cli-version: 4.0.0.1744
+          os: linux
+          executor: orb-tools/ubuntu
           filters: *integration-dev_filters
 
       # triggered by master branch commits
-      - test-commands:
-          name: test-commands-master
+      - test-install-cli:
+          name: test-install-cli-alpine-master
+          cli-version: 4.0.0.1744
+          os: linux
+          executor: orb-tools/alpine
+          filters: *integration-master_filters
+
+      - test-install-cli:
+          name: test-install-cli-ubuntu-master
+          cli-version: 4.0.0.1744
+          os: linux
+          executor: orb-tools/ubuntu
           filters: *integration-master_filters
 
       - trigger-patch-release:
           type: approval
-          requires:
-            - test-commands-master
+          requires: *test-commands-master
           filters: *integration-master_filters
 
       - trigger-minor-release:
           type: approval
-          requires:
-            - test-commands-master
+          requires: *test-commands-master
           filters: *integration-master_filters
 
       - trigger-major-release:
           type: approval
-          requires:
-            - test-commands-master
+          rrequires: *test-commands-master
           filters: *integration-master_filters
 
       # patch, minor, or major publishing
