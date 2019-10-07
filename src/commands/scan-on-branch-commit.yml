@@ -1,0 +1,88 @@
+description: >
+  Run SonarCloud scanning (node.js projects only) only on branch commits
+  (excludes Tags).
+  This is a convenience command that only exposes the parameters you'll
+  actually likely need to work with.
+  This should be the last command in the job that invokes it.
+
+parameters:
+  project-key:
+    description: >
+      REQUIRED: unique identifier for your project, as found in SonarCloud.
+      (i.e., socialtables_my-app)
+    type: string
+  github-project-slug:
+    description: >
+      REQUIRED: the organization/project-name value for your GitHub repo.
+      (i.e., socialtables/my-app)
+    type: string
+  coverage-paths:
+    description: >
+      (*)
+      Space-delimited list of globs or relative paths to coverage data files
+      (LCOV) for JavaScript (Excludes node_modules).
+    type: string
+    default: "**/lcov.info"
+  test-report-paths:
+    description: >
+      (*)
+      Space-delimited list of globs or relative paths to test execution data
+      files (Sonar Generic Test Data format) (Excludes node_modules).
+    type: string
+    default: "**/sonar-report.xml"
+  eslint-report-paths:
+    description: >
+      (*)
+      Space-delimited list of globs or relative paths to eslint result files
+      (Excludes node_modules).
+    type: string
+    default: "**/results.eslint.json"
+  stylelint-report-paths:
+    description: >
+      (*)
+      Space-delimited list of globs or relative paths to stylelint result files
+      (Excludes node_modules).
+    type: string
+    default: "**/results.stylelint.json"
+  covered-code-language:
+    description: >
+      (*)
+      Language of code to cover via LCOV files.
+    type: enum
+    enum:
+      - javascript
+      - typescript
+    default: javascript
+  raw-scanner-args:
+    description: >
+      (*)
+      NOTE: This is an escape hatch that allows you to pass in arbitrary
+      space-delimited args, as-is, to the SonarScanner CLI. These args will
+      override any other matching CLI args.
+      Example: `sonar.someProp=someValue sonar.anotherProp="something else"`
+    type: string
+    default: ""
+  cli-version:
+    description: >
+      Version of sonar-scanner CLI to use.
+    type: string
+    default: 4.2.0.1873
+  cache-version:
+    description: Cache version; increment this for a fresh cache
+    type: string
+    default: "0"
+
+steps:
+  - run-on-branch-commit:
+      cache-version: <<parameters.cache-version>>
+      cli-version: <<parameters.cli-version>>
+      steps:
+        - scan:
+            project-key: <<parameters.project-key>>
+            github-project-slug: <<parameters.github-project-slug>>
+            coverage-paths: <<parameters.coverage-paths>>
+            covered-code-language: <<parameters.covered-code-language>>
+            eslint-report-paths: <<parameters.eslint-report-paths>>
+            raw-scanner-args: <<parameters.raw-scanner-args>>
+            stylelint-report-paths: <<parameters.stylelint-report-paths>>
+            test-report-paths: <<parameters.test-report-paths>>

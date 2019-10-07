@@ -1,0 +1,36 @@
+description: >
+  Typical setup for ST's common circle config (pre-moonshot) using all available defaults.
+
+usage:
+  version: 2.1
+
+  orbs:
+    sonarcloud: socialtables/sonarcloud@x.y.z
+
+  jobs:
+    build:
+      docker:
+        - image: circleci/node:10.16.3
+      steps:
+        - checkout
+        - run: npm install
+        - run: npm test
+        # Here's the part we care about for this example:
+        - sonarcloud/scan-on-branch-commit:
+            # increment this version to force invalidation of the sonar-scanner executable's cache.
+            cache-version: v0
+            project-key: socialtables_my-project
+            github-project-slug: socialtables/my-project
+  # ...
+
+  workflows:
+    version: 2
+    build-deploy:
+      jobs:
+        - build:
+            # Here's the part we care about for this example:
+            context: st-global
+            filters:
+              tags:
+                only: /.*/
+  # ...

@@ -1,70 +1,103 @@
-description: "Run SonarCloud scanning (node.js projects only). This should be the last command in the job that invokes it."
+description: >
+  Run SonarCloud scanning (node.js projects only).
+  This should be the last command in the job that invokes it.
 
 parameters:
   project-key:
+    description: >
+      REQUIRED: unique identifier for your project, as found in SonarCloud.
+      (i.e., socialtables_my-app)
     type: string
-  organization:
-    type: string
-    default: socialtables
-  host-url:
-    type: string
-    default: https://sonarcloud.io/
-  scm-revision:
-    type: env_var_name
-    default: CIRCLE_SHA1
-  scm-branch-name:
-    type: env_var_name
-    default: CIRCLE_BRANCH
-  github-pr-url:
-    type: env_var_name
-    default: CIRCLE_PULL_REQUEST
-  build-string:
-    type: env_var_name
-    default: CIRCLE_BUILD_URL
-  sonar-login:
-    type: env_var_name
-    default: SONARCLOUD_TOKEN
   github-project-slug:
+    description: >
+      REQUIRED: the organization/project-name value for your GitHub repo.
+      (i.e., socialtables/my-app)
     type: string
-  github-username:
-    type: string
-    default: socialtables-deployer
-  github-api-token:
-    type: env_var_name
-    default: GITHUB_SOCIALTABLES_DEPLOYER_TOKEN
   coverage-paths:
-    description: Space-delimited list of globs or relative paths to coverage data files (LCOV) for JavaScript
+    description: >
+      Space-delimited list of globs or relative paths to coverage data files
+      (LCOV) for JavaScript (Excludes node_modules).
     type: string
     default: "**/lcov.info"
   test-report-paths:
+    description: >
+      Space-delimited list of globs or relative paths to test execution data
+      files (Sonar Generic Test Data format) (Excludes node_modules).
     type: string
-    description: Space-delimited list of globs or relative paths to test execution data files (Sonar Generic Test Data format)
     default: "**/sonar-report.xml"
   eslint-report-paths:
+    description: >
+      Space-delimited list of globs or relative paths to eslint result files
+      (Excludes node_modules).
     type: string
-    description: Space-delimited list of globs or relative paths to eslint result files.
     default: "**/results.eslint.json"
   stylelint-report-paths:
+    description: >
+      Space-delimited list of globs or relative paths to stylelint result files
+      (Excludes node_modules).
     type: string
-    description: Space-delimited list of globs or relative paths to stylelint result files.
     default: "**/results.stylelint.json"
   covered-code-language:
-    description: Language of code to cover
+    description: >
+      Language of code to cover via LCOV files.
     type: enum
     enum:
       - javascript
       - typescript
     default: javascript
-  project-version:
-    description: Your project's version identifier (uses package.json version by default)
-    type: string
-    default: ""
   raw-scanner-args:
-    description: |
-      This is an escape hatch that allows you to pass in arbitrary
+    description: >
+      NOTE: This is an escape hatch that allows you to pass in arbitrary
       space-delimited args, as-is, to the SonarScanner CLI. These args will
       override any other matching CLI args.
-      Example: sonar.someProp=someValue sonar.anotherProp="something else"
+      Example: `sonar.someProp=someValue sonar.anotherProp="something else"`
+    type: string
+    default: ""
+  organization:
+    description: Organization identifier.
+    type: string
+    default: socialtables
+  host-url:
+    description: Url to SonarCloud server
+    type: string
+    default: https://sonarcloud.io/
+  scm-revision:
+    description: >
+      Environment variable key containing source control revision (commit ID)
+    type: env_var_name
+    default: CIRCLE_SHA1
+  scm-branch-name:
+    description: >
+      Environment variable key containing the current source control branch
+      name.
+    type: env_var_name
+    default: CIRCLE_BRANCH
+  github-pr-url:
+    description: >
+      Environment variable key containing the URL of the github pull request
+      (if any) associated with the current build.
+    type: env_var_name
+    default: CIRCLE_PULL_REQUEST
+  build-string:
+    description: >
+      Environemnt variable key containing a string to uniquely identify the
+      current build.
+    type: env_var_name
+    default: CIRCLE_BUILD_URL
+  sonar-login:
+    description: >
+      Environemnt variable key containing the SonarCloud API token to use for
+      scanning -- this is included in the `st-global` context.
+    type: env_var_name
+    default: SONARCLOUD_TOKEN
+  github-api-token:
+    description: GitHub API token
+    type: env_var_name
+    default: GITHUB_SOCIALTABLES_DEPLOYER_TOKEN
+  project-version:
+    description: >
+      Your project's version identifier (uses package.json version if this
+      value is empty)
     type: string
     default: ""
 steps:
@@ -83,7 +116,6 @@ steps:
         SONAR_BUILD_STRING="${<<parameters.build-string>>}"
         SONAR_LOGIN="${<<parameters.sonar-login>>}"
         GITHUB_PROJECT_SLUG="<<parameters.github-project-slug>>"
-        GITHUB_USERNAME="<<parameters.github-username>>"
         GITHUB_API_TOKEN="${<<parameters.github-api-token>>}"
         LCOV_FILES=(<<parameters.coverage-paths>>)
         TEST_RESULTS_FILES=(<<parameters.test-report-paths>>)
@@ -95,7 +127,7 @@ steps:
         PROJECT_VERSION_PARAM="<<parameters.project-version>>"
         RAW_SCANNER_ARGS=(<<parameters.raw-scanner-args>>)
 
-        GITHUB_API_CREDENTIAL="$GITHUB_USERNAME:$GITHUB_API_TOKEN"
+        GITHUB_API_AUTH_HEADER="Authorization: Bearer ${GITHUB_API_TOKEN}"
         SONAR_PROJECT_VERSION="${PROJECT_VERSION_PARAM:-$(cat package.json | jq -r '.version')}"
 
         declare -A SONAR_ARGS
@@ -105,7 +137,12 @@ steps:
           SONAR_PR_KEY=$(basename $GITHUB_PR_URL)
 
           echo "SONAR_PR_KEY: $SONAR_PR_KEY"
-          PR_BASE_BRANCH=$(curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG/pulls/$SONAR_PR_KEY | jq -r '.base.ref')
+          PR_BASE_BRANCH=$( \
+            curl \
+              -H "$GITHUB_API_AUTH_HEADER" \
+              https://api.github.com/repos/$GITHUB_PROJECT_SLUG/pulls/$SONAR_PR_KEY | \
+              jq -r '.base.ref' \
+          )
           echo "PR_BASE_BRANCH: $PR_BASE_BRANCH"
 
           SONAR_ARGS+=(
@@ -120,7 +157,7 @@ steps:
           if [ "$SCM_BRANCH_NAME" ]; then
             GITHUB_DEFAULT_BRANCH=$( \
               curl \
-                -u "$GITHUB_API_CREDENTIAL" \
+                -H "$GITHUB_API_AUTH_HEADER" \
                 https://api.github.com/repos/$GITHUB_PROJECT_SLUG | \
                 jq -r '.default_branch' \
             )
