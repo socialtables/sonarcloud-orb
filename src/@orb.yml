@@ -1,8 +1,10 @@
 version: 2.1
 
 description: >
-  Description goes here...
-  include any info about pre-reqs/dependencies
+  Social Tables' internal tooling.
+  Provides commands to integrate SonarCloud scanning into CircleCI workflows.
+  NOTE: this orb currently only supports linux executors, and does not support
+  alpine images.
 
 orbs:
   build-tools: circleci/build-tools@2
