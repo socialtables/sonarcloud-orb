@@ -1,0 +1,25 @@
+description: |
+  Use SonarScanner on branch commits. This MUST be the last command in the
+  job that invokes it.  Will not run on tagged commits.
+
+parameters:
+  cli-version:
+    type: string
+    default: 4.2.0.1873
+  cli-download-path:
+    type: string
+    default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
+  cache-version:
+    description: Cache version; increment this for a fresh cache
+    type: string
+    default: "0"
+  steps:
+    description: Steps to run
+    type: steps
+steps:
+  - build-tools/run-filtered
+  - install-cli:
+      cli-version: <<parameters.cli-version>>
+      download-path: <<parameters.cli-download-path>>
+      cache-version: <<parameters.cache-version>>
+  - <<parameters.steps>>

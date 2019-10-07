@@ -12,6 +12,12 @@ parameters:
   scm-revision:
     type: env_var_name
     default: CIRCLE_SHA1
+  scm-branch-name:
+    type: env_var_name
+    default: CIRCLE_BRANCH
+  github-pr-url:
+    type: env_var_name
+    default: CIRCLE_PULL_REQUEST
   build-string:
     type: env_var_name
     default: CIRCLE_BUILD_URL
@@ -26,31 +32,50 @@ parameters:
   github-api-token:
     type: env_var_name
     default: GITHUB_SOCIALTABLES_DEPLOYER_TOKEN
-  cli-version:
+  coverage-paths:
+    description: Space-delimited list of globs or relative paths to coverage data files (LCOV) for JavaScript
     type: string
-    default: 4.1.0.1829
-  cli-download-path:
+    default: "**/lcov.info"
+  test-report-paths:
     type: string
-    default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
-  cache-version:
-    description: Cache version; increment this for a fresh cache
+    description: Space-delimited list of globs or relative paths to test execution data files (Sonar Generic Test Data format)
+    default: "**/sonar-report.xml"
+  eslint-report-paths:
     type: string
-    default: "0"
-
+    description: Space-delimited list of globs or relative paths to eslint result files.
+    default: "**/results.eslint.json"
+  stylelint-report-paths:
+    type: string
+    description: Space-delimited list of globs or relative paths to stylelint result files.
+    default: "**/results.stylelint.json"
+  covered-code-language:
+    description: Language of code to cover
+    type: enum
+    enum:
+      - javascript
+      - typescript
+    default: javascript
+  project-version:
+    description: Your project's version identifier (uses package.json version by default)
+    type: string
+    default: ""
+  raw-scanner-args:
+    description: |
+      This is an escape hatch that allows you to pass in arbitrary
+      space-delimited args, as-is, to the SonarScanner CLI. These args will
+      override any other matching CLI args.
+      Example: sonar.someProp=someValue sonar.anotherProp="something else"
+    type: string
+    default: ""
 steps:
-  - run:
-      name: "SonarCloud: Should run scan?"
-      command: |
-        if [ -z "$CIRCLE_PULL_REQUEST" ] && [ -z "$CIRCLE_BRANCH" ]; then
-          circleci-agent step halt
-        fi
-  - install-cli:
-      cli-version: <<parameters.cli-version>>
-      download-path: <<parameters.cli-download-path>>
-      cache-version: <<parameters.cache-version>>
+  - build-tools/ensure-command:
+      command: sonar-scanner
   - run:
       name: "SonarCloud: Scan"
       command: |
+        shopt -s nullglob globstar
+        GLOBIGNORE="**/node_modules/**:node_modules/**:**/node_modules"
+
         SONAR_PROJECT_KEY="<<parameters.project-key>>"
         SONAR_ORGANIZATION="<<parameters.organization>>"
         SONAR_HOST_URL="<<parameters.host-url>>"
@@ -60,56 +85,109 @@ steps:
         GITHUB_PROJECT_SLUG="<<parameters.github-project-slug>>"
         GITHUB_USERNAME="<<parameters.github-username>>"
         GITHUB_API_TOKEN="${<<parameters.github-api-token>>}"
+        LCOV_FILES=(<<parameters.coverage-paths>>)
+        TEST_RESULTS_FILES=(<<parameters.test-report-paths>>)
+        ESLINT_RESULTS_FILES=(<<parameters.eslint-report-paths>>)
+        STYLELINT_RESULTS_FILES=(<<parameters.stylelint-report-paths>>)
+        SONAR_COVERAGE_PLUGIN="<<parameters.covered-code-language>>"
+        SCM_BRANCH_NAME="${<<parameters.scm-branch-name>>}"
+        GITHUB_PR_URL="${<<parameters.github-pr-url>>}"
+        PROJECT_VERSION_PARAM="<<parameters.project-version>>"
+        RAW_SCANNER_ARGS=(<<parameters.raw-scanner-args>>)
 
         GITHUB_API_CREDENTIAL="$GITHUB_USERNAME:$GITHUB_API_TOKEN"
-        SONAR_PROJECT_VERSION=$(cat package.json | jq -r '.version')
+        SONAR_PROJECT_VERSION="${PROJECT_VERSION_PARAM:-$(cat package.json | jq -r '.version')}"
 
-        SONAR_PULLREQUEST=""
-        SONAR_BRANCHES=""
+        declare -A SONAR_ARGS
 
-        if [ "$CIRCLE_PULL_REQUEST" ]; then
-          echo "USING PR: $CIRCLE_PULL_REQUEST"
-          SONAR_PR_KEY=$(basename $CIRCLE_PULL_REQUEST)
+        if [ "$GITHUB_PR_URL" ]; then
+          echo "USING PR: $GITHUB_PR_URL"
+          SONAR_PR_KEY=$(basename $GITHUB_PR_URL)
 
           echo "SONAR_PR_KEY: $SONAR_PR_KEY"
           PR_BASE_BRANCH=$(curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG/pulls/$SONAR_PR_KEY | jq -r '.base.ref')
           echo "PR_BASE_BRANCH: $PR_BASE_BRANCH"
 
-          SONAR_PULLREQUEST="${SONAR_PULLREQUEST} --define sonar.pullrequest.base=${PR_BASE_BRANCH}"
-          SONAR_PULLREQUEST="${SONAR_PULLREQUEST} --define sonar.pullrequest.branch=${CIRCLE_BRANCH}"
-          SONAR_PULLREQUEST="${SONAR_PULLREQUEST} --define sonar.pullrequest.key=${SONAR_PR_KEY}"
+          SONAR_ARGS+=(
+            ["sonar.pullrequest.base"]=${PR_BASE_BRANCH} \
+            ["sonar.pullrequest.branch"]=${SCM_BRANCH_NAME} \
+            ["sonar.pullrequest.key"]=${SONAR_PR_KEY} \
+          )
 
           git branch -f $PR_BASE_BRANCH origin/$PR_BASE_BRANCH
 
         else
-          if [ "$CIRCLE_BRANCH" ]; then
-            GITHUB_DEFAULT_BRANCH=$(curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG | jq -r '.default_branch')
+          if [ "$SCM_BRANCH_NAME" ]; then
+            GITHUB_DEFAULT_BRANCH=$( \
+              curl \
+                -u "$GITHUB_API_CREDENTIAL" \
+                https://api.github.com/repos/$GITHUB_PROJECT_SLUG | \
+                jq -r '.default_branch' \
+            )
             echo "GITHUB_DEFAULT_BRANCH: $GITHUB_DEFAULT_BRANCH"
 
-            SONAR_BRANCHES="${SONAR_BRANCHES} --define sonar.branch.name=${CIRCLE_BRANCH}"
+            SONAR_ARGS["sonar.branch.name"]=$SCM_BRANCH_NAME
 
-            if [ "$CIRCLE_BRANCH" != "$GITHUB_DEFAULT_BRANCH" ]; then
-              SONAR_BRANCHES="${SONAR_BRANCHES} --define sonar.branch.target=${GITHUB_DEFAULT_BRANCH}"
+            if [ "$SCM_BRANCH_NAME" != "$GITHUB_DEFAULT_BRANCH" ]; then
+              SONAR_ARGS["sonar.branch.target"]=${GITHUB_DEFAULT_BRANCH}
 
               git branch -f $GITHUB_DEFAULT_BRANCH origin/$GITHUB_DEFAULT_BRANCH
             fi
           fi
         fi
 
-        echo "SONAR_PULLREQUEST -> $SONAR_PULLREQUEST"
-        echo "SONAR_BRANCHES -> $SONAR_BRANCHES"
+        function toCSV { local IFS=","; echo "$*"; }
+        function splitRawParam {
+          local IFS="="; read -ra PARAM \<<< "$1"
+          echo ${PARAM[*]}
+        }
 
-        if [ ! -z "$SONAR_PULLREQUEST" ] || [ ! -z "$SONAR_BRANCHES" ]; then
-          export SONAR_SCANNER_OPTS="-server"
-          sonar-scanner \
-            --define sonar.host.url="$SONAR_HOST_URL" \
-            --define sonar.organization="$SONAR_ORGANIZATION" \
-            --define sonar.buildString="$SONAR_BUILD_STRING" \
-            --define sonar.scm.revision="$SONAR_SCM_REVISION" \
-            --define sonar.projectKey="$SONAR_PROJECT_KEY" \
-            --define sonar.projectVersion="$SONAR_PROJECT_VERSION" \
-            $SONAR_PULLREQUEST \
-            $SONAR_BRANCHES \
-            --define sonar.login="$SONAR_LOGIN"
+        if [ ${#LCOV_FILES[@]} -gt 0 ]; then
+          SONAR_ARGS["sonar.$SONAR_COVERAGE_PLUGIN.lcov.reportPaths"]="$(toCSV ${LCOV_FILES[@]})"
         fi
+
+        if [ ${#TEST_RESULTS_FILES[@]} -gt 0 ]; then
+          SONAR_ARGS["sonar.testExecutionReportPaths"]="$(toCSV $TEST_RESULTS_FILES)"
+        fi
+
+        if [ ${#ESLINT_RESULTS_FILES[@]} -gt 0 ]; then
+          SONAR_ARGS["sonar.eslint.reportPaths"]="$(toCSV $ESLINT_RESULTS_FILES)"
+        fi
+
+        if [ ${#STYLELINT_RESULTS_FILES[@]} -gt 0 ]; then
+          SONAR_ARGS["sonar.css.stylelint.reportPaths"]="$(toCSV $STYLELINT_RESULTS_FILES)"
+        fi
+
+        SONAR_ARGS+=( \
+          ["sonar.host.url"]="$SONAR_HOST_URL" \
+          ["sonar.organization"]="$SONAR_ORGANIZATION" \
+          ["sonar.buildString"]="$SONAR_BUILD_STRING" \
+          ["sonar.scm.revision"]="$SONAR_SCM_REVISION" \
+          ["sonar.projectKey"]="$SONAR_PROJECT_KEY" \
+          ["sonar.projectVersion"]="$SONAR_PROJECT_VERSION" \
+          ["sonar.login"]="$SONAR_LOGIN" \
+        )
+
+        if [ ${#RAW_SCANNER_ARGS[@]} -gt 0 ]; then
+          for param in "${RAW_SCANNER_ARGS[@]}";
+          do
+            param_parts=($(splitRawParam $param))
+            SONAR_ARGS["${param_parts[0]}"]="${param_parts[1]}"
+          done
+        fi
+
+        CLI_ARGS=()
+        echo "SONAR_ARGS:"
+        for key in "${!SONAR_ARGS[@]}";
+        do
+          ARG="-D$key=${SONAR_ARGS[$key]}"
+          CLI_ARGS+=($ARG)
+          # exclude login here for security reasons
+          if [ "$key" != "sonar.login" ]; then
+            echo "$ARG";
+          fi
+        done
+
+        export SONAR_SCANNER_OPTS="-server"
+        sonar-scanner ${CLI_ARGS[*]}
       when: always
