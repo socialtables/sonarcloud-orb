@@ -39,11 +39,19 @@ parameters:
   coverage-paths:
     description: Space-delimited list of globs or relative paths to coverage data files (LCOV) for JavaScript
     type: string
-    default: "**/**/lcov.info"
+    default: "**/lcov.info"
   test-report-paths:
     type: string
     description: Space-delimited list of globs or relative paths to test execution data files (Sonar Generic Test Data format)
-    default: "**/**/sonar-report.xml"
+    default: "**/sonar-report.xml"
+  eslint-report-paths:
+    type: string
+    description: Space-delimited list of globs or relative paths to eslint result files.
+    default: "**/results.eslint.json"
+  stylelint-report-paths:
+    type: string
+    description: Space-delimited list of globs or relative paths to stylelint result files.
+    default: "**/results.stylelint.json"
   covered-code-language:
     description: Language of code to cover
     type: enum
@@ -61,21 +69,26 @@ steps:
   - run:
       name: "SonarCloud: Scan"
       command: |
-        SONAR_PROJECT_KEY="<<parameters.project-key>>"
-        SONAR_ORGANIZATION="<<parameters.organization>>"
-        SONAR_HOST_URL="<<parameters.host-url>>"
-        SONAR_SCM_REVISION="${<<parameters.scm-revision>>}"
-        SONAR_BUILD_STRING="${<<parameters.build-string>>}"
-        SONAR_LOGIN="${<<parameters.sonar-login>>}"
-        GITHUB_PROJECT_SLUG="<<parameters.github-project-slug>>"
-        GITHUB_USERNAME="<<parameters.github-username>>"
-        GITHUB_API_TOKEN="${<<parameters.github-api-token>>}"
-        LCOV_FILES=("<<parameters.coverage-paths>>")
-        TEST_RESULTS_FILES=("<<parameters.test-report-paths>>")
-        SONAR_COVERAGE_PLUGIN="<<parameters.covered-code-language>>"
-        SCM_BRANCH_NAME="${<<parameters.scm-branch-name>>}"
-        GITHUB_PR_URL="${<<parameters.github-pr-url>>}"
-        PROJECT_VERSION_PARAM="<<parameters.project-version>>"
+        shopt -s nullglob globstar
+        GLOBIGNORE="**/node_modules/**:node_modules/**:**/node_modules"
+
+        SONAR_PROJECT_KEY="$parameters__PROJECT_KEY"
+        SONAR_ORGANIZATION="$parameters__ORGANIZATION"
+        SONAR_HOST_URL="$parameters__HOST_URL"
+        SONAR_SCM_REVISION="${parameters__SCM_REVISION}"
+        SONAR_BUILD_STRING="${parameters__BUILD_STRING}"
+        SONAR_LOGIN="${parameters__SONAR_LOGIN}"
+        GITHUB_PROJECT_SLUG="$parameters__GITHUB_PROJECT_SLUG"
+        GITHUB_USERNAME="$parameters__GITHUB_USERNAME"
+        GITHUB_API_TOKEN="${parameters__GITHUB_API_TOKEN}"
+        LCOV_FILES=($parameters__COVERAGE_PATHS)
+        TEST_RESULTS_FILES=($parameters__TEST_REPORT_PATHS)
+        ESLINT_RESULTS_FILES=($parameters__ESLINT_REPORT_PATHS)
+        STYLELINT_RESULTS_FILES=($parameters__STYLELINT_REPORT_PATHS)
+        SONAR_COVERAGE_PLUGIN="$parameters__COVERED_CODE_LANGUAGE"
+        SCM_BRANCH_NAME="${parameters__SCM_BRANCH_NAME}"
+        GITHUB_PR_URL="${parameters__GITHUB_PR_URL}"
+        PROJECT_VERSION_PARAM="$parameters__PROJECT_VERSION"
 
         GITHUB_API_CREDENTIAL="$GITHUB_USERNAME:$GITHUB_API_TOKEN"
         SONAR_PROJECT_VERSION="${PROJECT_VERSION_PARAM:-$(cat package.json | jq -r '.version')}"
@@ -115,19 +128,42 @@ steps:
 
         function toCSV { local IFS=","; echo "$*"; }
 
+        if [ ${#LCOV_FILES[@]} -gt 0 ]; then
+          SONAR_SCANNER_ARGS+=( \
+            -Dsonar.$SONAR_COVERAGE_PLUGIN.lcov.reportPaths="$(toCSV ${LCOV_FILES[@]})" \
+          )
+        fi
+
+        if [ ${#TEST_RESULTS_FILES[@]} -gt 0 ]; then
+          SONAR_SCANNER_ARGS+=( \
+            -Dsonar.testExecutionReportPaths="$(toCSV $TEST_RESULTS_FILES)" \
+          )
+        fi
+
+        if [ ${#ESLINT_RESULTS_FILES[@]} -gt 0 ]; then
+          SONAR_SCANNER_ARGS+=( \
+            -Dsonar.eslint.reportPaths="$(toCSV $ESLINT_RESULTS_FILES)" \
+          )
+        fi
+
+        if [ ${#STYLELINT_RESULTS_FILES[@]} -gt 0 ]; then
+          SONAR_SCANNER_ARGS+=( \
+            -Dsonar.css.stylelint.reportPaths="$(toCSV $STYLELINT_RESULTS_FILES)" \
+          )
+        fi
+
         SONAR_SCANNER_ARGS+=( \
           -Dsonar.host.url="$SONAR_HOST_URL" \
           -Dsonar.organization="$SONAR_ORGANIZATION" \
           -Dsonar.buildString="$SONAR_BUILD_STRING" \
           -Dsonar.scm.revision="$SONAR_SCM_REVISION" \
           -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
-          -Dsonar.projectVersion="$SONAR_PROJECT_VERSION" \
-          -Dsonar.$SONAR_COVERAGE_PLUGIN.lcov.reportPaths="$(toCSV $LCOV_FILES)" \
-          -Dsonar.testExecutionReportPaths="$(toCSV $TEST_RESULTS_FILES)" \
+          -Dsonar.projectVersion="$SONAR_PROJECT_VERSION"
         )
 
         # exclude login here for security reasons
-        echo "SONAR_SCANNER_ARGS -> ${SONAR_SCANNER_ARGS[*]}"
+        echo "SONAR_SCANNER_ARGS:"
+        printf "%s\n" "${SONAR_SCANNER_ARGS[@]}"
 
         SONAR_SCANNER_ARGS+=( -Dsonar.login="$SONAR_LOGIN" )
 
