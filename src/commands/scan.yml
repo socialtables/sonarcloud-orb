@@ -32,10 +32,6 @@ parameters:
   github-api-token:
     type: env_var_name
     default: GITHUB_SOCIALTABLES_DEPLOYER_TOKEN
-  misc-scanner-args:
-    description: This is an escape hatch that allows you to pass in arbitrary args, as-is, to the SonarScanner CLI
-    type: string
-    default: ""
   coverage-paths:
     description: Space-delimited list of globs or relative paths to coverage data files (LCOV) for JavaScript
     type: string
@@ -63,6 +59,14 @@ parameters:
     description: Your project's version identifier (uses package.json version by default)
     type: string
     default: ""
+  raw-scanner-args:
+    description: |
+      This is an escape hatch that allows you to pass in arbitrary
+      space-delimited args, as-is, to the SonarScanner CLI. These args will
+      override any other matching CLI args.
+      Example: sonar.someProp=someValue sonar.anotherProp="something else"
+    type: string
+    default: ""
 steps:
   - build-tools/ensure-command:
       command: sonar-scanner
@@ -72,28 +76,29 @@ steps:
         shopt -s nullglob globstar
         GLOBIGNORE="**/node_modules/**:node_modules/**:**/node_modules"
 
-        SONAR_PROJECT_KEY="$parameters__PROJECT_KEY"
-        SONAR_ORGANIZATION="$parameters__ORGANIZATION"
-        SONAR_HOST_URL="$parameters__HOST_URL"
-        SONAR_SCM_REVISION="${parameters__SCM_REVISION}"
-        SONAR_BUILD_STRING="${parameters__BUILD_STRING}"
-        SONAR_LOGIN="${parameters__SONAR_LOGIN}"
-        GITHUB_PROJECT_SLUG="$parameters__GITHUB_PROJECT_SLUG"
-        GITHUB_USERNAME="$parameters__GITHUB_USERNAME"
-        GITHUB_API_TOKEN="${parameters__GITHUB_API_TOKEN}"
-        LCOV_FILES=($parameters__COVERAGE_PATHS)
-        TEST_RESULTS_FILES=($parameters__TEST_REPORT_PATHS)
-        ESLINT_RESULTS_FILES=($parameters__ESLINT_REPORT_PATHS)
-        STYLELINT_RESULTS_FILES=($parameters__STYLELINT_REPORT_PATHS)
-        SONAR_COVERAGE_PLUGIN="$parameters__COVERED_CODE_LANGUAGE"
-        SCM_BRANCH_NAME="${parameters__SCM_BRANCH_NAME}"
-        GITHUB_PR_URL="${parameters__GITHUB_PR_URL}"
-        PROJECT_VERSION_PARAM="$parameters__PROJECT_VERSION"
+        SONAR_PROJECT_KEY="<<parameters.project-key>>"
+        SONAR_ORGANIZATION="<<parameters.organization>>"
+        SONAR_HOST_URL="<<parameters.host-url>>"
+        SONAR_SCM_REVISION="${<<parameters.scm-revision>>}"
+        SONAR_BUILD_STRING="${<<parameters.build-string>>}"
+        SONAR_LOGIN="${<<parameters.sonar-login>>}"
+        GITHUB_PROJECT_SLUG="<<parameters.github-project-slug>>"
+        GITHUB_USERNAME="<<parameters.github-username>>"
+        GITHUB_API_TOKEN="${<<parameters.github-api-token>>}"
+        LCOV_FILES=(<<parameters.coverage-paths>>)
+        TEST_RESULTS_FILES=(<<parameters.test-report-paths>>)
+        ESLINT_RESULTS_FILES=(<<parameters.eslint-report-paths>>)
+        STYLELINT_RESULTS_FILES=(<<parameters.stylelint-report-paths>>)
+        SONAR_COVERAGE_PLUGIN="<<parameters.covered-code-language>>"
+        SCM_BRANCH_NAME="${<<parameters.scm-branch-name>>}"
+        GITHUB_PR_URL="${<<parameters.github-pr-url>>}"
+        PROJECT_VERSION_PARAM="<<parameters.project-version>>"
+        RAW_SCANNER_ARGS=(<<parameters.raw-scanner-args>>)
 
         GITHUB_API_CREDENTIAL="$GITHUB_USERNAME:$GITHUB_API_TOKEN"
         SONAR_PROJECT_VERSION="${PROJECT_VERSION_PARAM:-$(cat package.json | jq -r '.version')}"
 
-        SONAR_SCANNER_ARGS=()
+        declare -A SONAR_ARGS
 
         if [ "$GITHUB_PR_URL" ]; then
           echo "USING PR: $GITHUB_PR_URL"
@@ -103,23 +108,28 @@ steps:
           PR_BASE_BRANCH=$(curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG/pulls/$SONAR_PR_KEY | jq -r '.base.ref')
           echo "PR_BASE_BRANCH: $PR_BASE_BRANCH"
 
-          SONAR_SCANNER_ARGS+=( \
-            -Dsonar.pullrequest.base=${PR_BASE_BRANCH} \
-            -Dsonar.pullrequest.branch=${SCM_BRANCH_NAME} \
-            -Dsonar.pullrequest.key=${SONAR_PR_KEY} \
+          SONAR_ARGS+=(
+            ["sonar.pullrequest.base"]=${PR_BASE_BRANCH} \
+            ["sonar.pullrequest.branch"]=${SCM_BRANCH_NAME} \
+            ["sonar.pullrequest.key"]=${SONAR_PR_KEY} \
           )
 
           git branch -f $PR_BASE_BRANCH origin/$PR_BASE_BRANCH
 
         else
           if [ "$SCM_BRANCH_NAME" ]; then
-            GITHUB_DEFAULT_BRANCH=$( curl -u "$GITHUB_API_CREDENTIAL" https://api.github.com/repos/$GITHUB_PROJECT_SLUG | jq -r '.default_branch')
+            GITHUB_DEFAULT_BRANCH=$( \
+              curl \
+                -u "$GITHUB_API_CREDENTIAL" \
+                https://api.github.com/repos/$GITHUB_PROJECT_SLUG | \
+                jq -r '.default_branch' \
+            )
             echo "GITHUB_DEFAULT_BRANCH: $GITHUB_DEFAULT_BRANCH"
 
-            SONAR_SCANNER_ARGS+=( -Dsonar.branch.name=$SCM_BRANCH_NAME )
+            SONAR_ARGS["sonar.branch.name"]=$SCM_BRANCH_NAME
 
             if [ "$SCM_BRANCH_NAME" != "$GITHUB_DEFAULT_BRANCH" ]; then
-              SONAR_SCANNER_ARGS+=( -Dsonar.branch.target=${GITHUB_DEFAULT_BRANCH} )
+              SONAR_ARGS["sonar.branch.target"]=${GITHUB_DEFAULT_BRANCH}
 
               git branch -f $GITHUB_DEFAULT_BRANCH origin/$GITHUB_DEFAULT_BRANCH
             fi
@@ -127,46 +137,57 @@ steps:
         fi
 
         function toCSV { local IFS=","; echo "$*"; }
+        function splitRawParam {
+          local IFS="="; read -ra PARAM \<<< "$1"
+          echo ${PARAM[*]}
+        }
 
         if [ ${#LCOV_FILES[@]} -gt 0 ]; then
-          SONAR_SCANNER_ARGS+=( \
-            -Dsonar.$SONAR_COVERAGE_PLUGIN.lcov.reportPaths="$(toCSV ${LCOV_FILES[@]})" \
-          )
+          SONAR_ARGS["sonar.$SONAR_COVERAGE_PLUGIN.lcov.reportPaths"]="$(toCSV ${LCOV_FILES[@]})"
         fi
 
         if [ ${#TEST_RESULTS_FILES[@]} -gt 0 ]; then
-          SONAR_SCANNER_ARGS+=( \
-            -Dsonar.testExecutionReportPaths="$(toCSV $TEST_RESULTS_FILES)" \
-          )
+          SONAR_ARGS["sonar.testExecutionReportPaths"]="$(toCSV $TEST_RESULTS_FILES)"
         fi
 
         if [ ${#ESLINT_RESULTS_FILES[@]} -gt 0 ]; then
-          SONAR_SCANNER_ARGS+=( \
-            -Dsonar.eslint.reportPaths="$(toCSV $ESLINT_RESULTS_FILES)" \
-          )
+          SONAR_ARGS["sonar.eslint.reportPaths"]="$(toCSV $ESLINT_RESULTS_FILES)"
         fi
 
         if [ ${#STYLELINT_RESULTS_FILES[@]} -gt 0 ]; then
-          SONAR_SCANNER_ARGS+=( \
-            -Dsonar.css.stylelint.reportPaths="$(toCSV $STYLELINT_RESULTS_FILES)" \
-          )
+          SONAR_ARGS["sonar.css.stylelint.reportPaths"]="$(toCSV $STYLELINT_RESULTS_FILES)"
         fi
 
-        SONAR_SCANNER_ARGS+=( \
-          -Dsonar.host.url="$SONAR_HOST_URL" \
-          -Dsonar.organization="$SONAR_ORGANIZATION" \
-          -Dsonar.buildString="$SONAR_BUILD_STRING" \
-          -Dsonar.scm.revision="$SONAR_SCM_REVISION" \
-          -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
-          -Dsonar.projectVersion="$SONAR_PROJECT_VERSION"
+        SONAR_ARGS+=( \
+          ["sonar.host.url"]="$SONAR_HOST_URL" \
+          ["sonar.organization"]="$SONAR_ORGANIZATION" \
+          ["sonar.buildString"]="$SONAR_BUILD_STRING" \
+          ["sonar.scm.revision"]="$SONAR_SCM_REVISION" \
+          ["sonar.projectKey"]="$SONAR_PROJECT_KEY" \
+          ["sonar.projectVersion"]="$SONAR_PROJECT_VERSION" \
+          ["sonar.login"]="$SONAR_LOGIN" \
         )
 
-        # exclude login here for security reasons
-        echo "SONAR_SCANNER_ARGS:"
-        printf "%s\n" "${SONAR_SCANNER_ARGS[@]}"
+        if [ ${#RAW_SCANNER_ARGS[@]} -gt 0 ]; then
+          for param in "${RAW_SCANNER_ARGS[@]}";
+          do
+            param_parts=($(splitRawParam $param))
+            SONAR_ARGS["${param_parts[0]}"]="${param_parts[1]}"
+          done
+        fi
 
-        SONAR_SCANNER_ARGS+=( -Dsonar.login="$SONAR_LOGIN" )
+        CLI_ARGS=()
+        echo "SONAR_ARGS:"
+        for key in "${!SONAR_ARGS[@]}";
+        do
+          ARG="-D$key=${SONAR_ARGS[$key]}"
+          CLI_ARGS+=($ARG)
+          # exclude login here for security reasons
+          if [ "$key" != "sonar.login" ]; then
+            echo "$ARG";
+          fi
+        done
 
         export SONAR_SCANNER_OPTS="-server"
-        sonar-scanner ${SONAR_SCANNER_ARGS[*]}
+        sonar-scanner ${CLI_ARGS[*]}
       when: always
