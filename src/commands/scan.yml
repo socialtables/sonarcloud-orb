@@ -227,4 +227,3 @@ steps:
 
         export SONAR_SCANNER_OPTS="-server"
         sonar-scanner ${CLI_ARGS[*]}
-      when: always

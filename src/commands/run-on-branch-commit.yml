@@ -5,7 +5,7 @@ description: |
 parameters:
   cli-version:
     type: string
-    default: 4.2.0.1873
+    default: 4.3.0.2102
   cli-download-path:
     type: string
     default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/

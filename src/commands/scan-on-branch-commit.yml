@@ -66,7 +66,7 @@ parameters:
     description: >
       Version of sonar-scanner CLI to use.
     type: string
-    default: 4.2.0.1873
+    default: 4.3.0.2102
   cache-version:
     description: Cache version; increment this for a fresh cache
     type: string
