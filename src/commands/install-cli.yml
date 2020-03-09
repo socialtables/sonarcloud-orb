@@ -3,7 +3,7 @@ description: Install sonar-scanner CLI
 parameters:
   cli-version:
     type: string
-    default: 4.1.0.1829
+    default: 4.3.0.2102
   download-path:
     type: string
     default: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/
