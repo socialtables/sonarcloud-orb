@@ -5,7 +5,7 @@ version: 2.1
 # you can use scripts/publish-alpha.sh to publish a @dev:alpha release
 orbs:
   sonarcloud-alpha: socialtables/sonarcloud@dev:alpha
-  orb-tools: circleci/orb-tools@8
+  orb-tools: circleci/orb-tools@8.27.4
   queue: eddiewebb/queue@1
 
 

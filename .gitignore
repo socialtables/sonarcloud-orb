@@ -4,3 +4,4 @@ processed.yml
 dist
 *.log
 .DS_Store
+orb.yml
