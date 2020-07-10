@@ -4,7 +4,7 @@ version: 2.1
 # release must exist; you'll need to publish manually at least once)
 # you can use scripts/publish-alpha.sh to publish a @dev:alpha release
 orbs:
-  sonarcloud-alpha: socialtables/sonarcloud@dev:alpha
+  sonarcloud: socialtables/sonarcloud@<<pipeline.parameters.dev-orb-version>>
   orb-tools: circleci/orb-tools@9.0
 
 references:
@@ -39,7 +39,7 @@ jobs:
         default: linux
     executor: <<parameters.executor>>
     steps:
-      - sonarcloud-alpha/install-cli:
+      - sonarcloud/install-cli:
           cli-version: <<parameters.cli-version>>
           os: <<parameters.os>>
           output-file: <<parameters.version-check-file>>
