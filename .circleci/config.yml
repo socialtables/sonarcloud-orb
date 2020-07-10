@@ -55,7 +55,6 @@ workflows:
     unless: << pipeline.parameters.run-integration-tests >>
     jobs:
       - orb-tools/lint
-      - orb-tools/shellcheck
       - orb-tools/pack
 
       # release dev version of orb, for testing & possible publishing.
@@ -69,7 +68,6 @@ workflows:
           orb-name: *orb-name
           requires:
             - orb-tools/lint
-            - orb-tools/shellcheck
             - orb-tools/pack
 
       # trigger an integration workflow to test the
