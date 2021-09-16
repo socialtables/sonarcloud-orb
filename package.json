@@ -1,0 +1,36 @@
+{
+  "name": "sonarcloud-orb",
+  "version": "0.0.0",
+  "description": "(not published via NPM) ",
+  "scripts": {
+    "clean": "rm -rf .out && mkdir .out",
+    "pack": "circleci config pack src > .out/orb.yml",
+    "validate": "circleci orb validate .out/orb.yml",
+    "validate:processed": "circleci orb validate .out/processed.yml",
+    "process": "circleci orb process .out/orb.yml > .out/processed.yml",
+    "check": "npm run clean && npm run pack && npm run process && npm run validate:processed && npm run validate",
+    "preinstall": "brew list circleci &>/dev/null || brew install circleci",
+    "prepublish:dev": "npm run check",
+    "publish:dev": "circleci orb publish --skip-update-check .out/orb.yml socialtables/sonarcloud@dev:local-${npm_package_gitHead:0:7}",
+    "prepublish:dev-alpha": "npm run check",
+    "publish:dev-alpha": "circleci orb publish --skip-update-check .out/orb.yml socialtables/sonarcloud@dev:alpha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/socialtables/sonarcloud-orb.git"
+  },
+  "author": "jrnail23",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/socialtables/sonarcloud-orb/issues"
+  },
+  "homepage": "https://github.com/socialtables/sonarcloud-orb#readme",
+  "devDependencies": {
+    "husky": "^4.3.8"
+  },
+  "husky": {
+    "hooks": {
+      "pre-push": "npm run check"
+    }
+  }
+}
