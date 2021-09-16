@@ -1,7 +1,9 @@
-.vscode
-*.orig
-processed.yml
-dist
 *.log
+*.orig
 .DS_Store
+.vscode
+dist
+node_modules
 orb.yml
+package-lock.json
+processed.yml
