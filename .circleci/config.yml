@@ -20,7 +20,7 @@ parameters:
     default: false
   dev-orb-version:
     type: string
-    default: "dev:alpha"
+    default: 'dev:alpha'
 
 jobs:
   test-install-cli:
@@ -114,4 +114,4 @@ workflows:
             - test-install-cli
           filters:
             branches:
-              only: master
+              only:

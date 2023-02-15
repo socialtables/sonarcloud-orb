@@ -41,20 +41,20 @@ workflows:
             - orb-tools/publish-dev
           filters:
             branches:
-              ignore: master
+              ignore: main
 
       # by default, the 1st job (above) will trigger only integration tests;
       # the 2nd job (below) may also publish a production orb version
       - orb-tools/trigger-integration-workflow:
-          name: trigger-integration-master
+          name: trigger-integration-main
           cleanup-tags: true
           ssh-fingerprints: <orb-fingerprint>
-          tag: master
+          tag: main
           requires:
             - orb-tools/publish-dev
           filters:
             branches:
-              only: master
+              only: main
 
   # this `integration-tests_prod-release` workflow will ignore commits
   # it is only triggered by git tags, which are created in the job above
@@ -63,9 +63,9 @@ workflows:
   #     # - your integration test jobs go here
   #     # - you will want to call each integration testing job twice,
   #     # - each under a different name:
-  #     # - once, for integration tests triggered by non-master-branch commits
-  #     # - and again, for tests triggered by commits to master
-  #     # - only commits to master should potentially trigger a prod release
+  #     # - once, for integration tests triggered by non-main-branch commits
+  #     # - and again, for tests triggered by commits to main
+  #     # - only commits to main should potentially trigger a prod release
 
   #     # patch, minor, or major publishing
   #     - orb-tools/dev-promote-prod:
@@ -79,7 +79,7 @@ workflows:
   #           branches:
   #             ignore: /.*/
   #           tags:
-  #             only: /master-patch.*/
+  #             only: /main-patch.*/
 
   #     - orb-tools/dev-promote-prod:
   #         name: dev-promote-minor
@@ -93,7 +93,7 @@ workflows:
   #           branches:
   #             ignore: /.*/
   #           tags:
-  #             only: /master-minor.*/
+  #             only: /main-minor.*/
 
   #     - orb-tools/dev-promote-prod:
   #         name: dev-promote-major
@@ -107,7 +107,7 @@ workflows:
   #           branches:
   #             ignore: /.*/
   #           tags:
-  #             only: /master-major.*/
+  #             only: /main-major.*/
 
 # yaml anchor filters
 integration-dev_filters: &integration-dev_filters
@@ -116,8 +116,8 @@ integration-dev_filters: &integration-dev_filters
   tags:
     only: /integration-.*/
 
-integration-master_filters: &integration-master_filters
+integration-main_filters: &integration-main_filters
   branches:
     ignore: /.*/
   tags:
-    only: /master-.*/
+    only: /main-.*/
