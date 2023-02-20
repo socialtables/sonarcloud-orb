@@ -71,6 +71,11 @@ parameters:
     description: Cache version; increment this for a fresh cache
     type: string
     default: "0"
+  project-root:
+    description: >
+      The root of the project that should be analyzed (relative to the root directory of the repository)
+    type: string
+    default: "."
 
 steps:
   - run-on-branch-commit:
@@ -86,3 +91,4 @@ steps:
             raw-scanner-args: <<parameters.raw-scanner-args>>
             stylelint-report-paths: <<parameters.stylelint-report-paths>>
             test-report-paths: <<parameters.test-report-paths>>
+            project-root: <<parameters.project-root>>
