@@ -33,7 +33,7 @@ jobs:
         default: /tmp/scanner-version-check.txt
       cli-version:
         type: string
-        default: 4.6.2.2472
+        default: 4.8.0.2856
       os:
         type: string
         default: linux
