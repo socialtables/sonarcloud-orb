@@ -1,7 +1,7 @@
 {
   "name": "sonarcloud-orb",
   "version": "0.0.0",
-  "description": "(not published via NPM) ",
+  "description": "(not published via NPM)",
   "scripts": {
     "clean": "rm -rf .out && mkdir .out",
     "pack": "circleci config pack src > .out/orb.yml",
