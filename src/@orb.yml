@@ -6,5 +6,8 @@ description: >
   NOTE: this orb currently only supports linux executors, and does not support
   alpine images.
 
+display:
+  source_url: https://github.com/socialtables/sonarcloud-orb
+
 orbs:
   build-tools: circleci/build-tools@2
