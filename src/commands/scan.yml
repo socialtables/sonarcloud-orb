@@ -208,7 +208,7 @@ steps:
           ["sonar.scm.revision"]="$SONAR_SCM_REVISION" \
           ["sonar.projectKey"]="$SONAR_PROJECT_KEY" \
           ["sonar.projectVersion"]="$SONAR_PROJECT_VERSION" \
-          ["sonar.login"]="$SONAR_LOGIN" \
+          ["sonar.token"]="$SONAR_LOGIN" \
         )
 
         if [ ${#RAW_SCANNER_ARGS[@]} -gt 0 ]; then
