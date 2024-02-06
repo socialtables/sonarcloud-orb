@@ -9,7 +9,6 @@ parameters:
   organization:
     description: Organization identifier.
     type: string
-    default: socialtables-internal
   project-key:
     description: >
       REQUIRED: unique identifier for your project, as found in SonarCloud.
