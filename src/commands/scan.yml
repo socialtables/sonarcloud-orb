@@ -56,7 +56,7 @@ parameters:
   organization:
     description: Organization identifier.
     type: string
-    default: socialtables
+    default: socialtables-internal
   host-url:
     description: Url to SonarCloud server
     type: string
