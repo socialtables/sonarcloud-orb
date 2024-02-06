@@ -1,0 +1,64 @@
+version: 2.1
+orbs:
+  # Your orb will be automatically injected here during the pipeline.
+  # Reference your orb's jobs and commands below as they will exist when built.
+  orb-tools: circleci/orb-tools@12.0
+  # The orb definition is intentionally not included here. It will be injected into the pipeline.
+  sonarcloud: {}
+# Use this tag to ensure test jobs always run,
+# even though the downstream publish job will only run on release tags.
+filters: &filters
+  tags:
+    only: /.*/
+# Filter for release tags.
+release-filters: &release-filters
+  branches:
+    ignore: /.*/
+  tags:
+    only: /^v[0-9]+\.[0-9]+\.[0-9]+$/
+jobs:
+  command-test:
+    parameters:
+      executor:
+        type: executor
+        default: orb-tools/python
+      version-check-file:
+        type: string
+        default: /tmp/scanner-version-check.txt
+      cli-version:
+        type: string
+        default: 5.0.1.3006
+      os:
+        type: string
+        default: linux
+    executor: <<parameters.executor>>
+    steps:
+      - sonarcloud/install-cli:
+          cli-version: <<parameters.cli-version>>
+          os: <<parameters.os>>
+          output-file: <<parameters.version-check-file>>
+          no-cache: true
+      - run: grep "Scanner <<parameters.cli-version>>" <<parameters.version-check-file>>
+      - run:
+          name: Cleanup test files
+          command: rm <<parameters.version-check-file>>
+workflows:
+  test-deploy:
+    jobs:
+      # Make sure to include "filters: *filters" in every test job you want to run as part of your deployment.
+      # Test your orb's commands in a custom job and test your orb's jobs directly as a part of this workflow.
+      - command-test:
+          filters: *filters
+      # The orb must be re-packed for publishing, and saved to the workspace.
+      - orb-tools/pack:
+          filters: *release-filters
+      - orb-tools/publish:
+          orb_name: socialtables/sonarcloud
+          vcs_type: << pipeline.project.type >>
+          pub_type: production
+          # Ensure this job requires all test jobs and the pack job.
+          requires:
+            - orb-tools/pack
+            - command-test
+          context: orbs-publishing
+          filters: *release-filters

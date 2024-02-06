@@ -1,117 +1,30 @@
 version: 2.1
-
-# add your orb below, to be used in integration tests (note: a @dev:alpha
-# release must exist; you'll need to publish manually at least once)
-# you can use scripts/publish-alpha.sh to publish a @dev:alpha release
+setup: true
 orbs:
-  sonarcloud: socialtables/sonarcloud@<<pipeline.parameters.dev-orb-version>>
-  orb-tools: circleci/orb-tools@9.0
+  orb-tools: circleci/orb-tools@12
+  shellcheck: circleci/shellcheck@3.1
 
-references:
-  orb-name: &orb-name socialtables/sonarcloud
-  ssh-fingerprints: &ssh-fingerprints 0e:5c:75:e2:4f:f0:2a:33:81:db:66:19:c0:bb:02:92
-
-# Pipeline parameters
-parameters:
-  # These pipeline parameters are required by the "trigger-integration-tests-workflow"
-  # job, by default.
-  run-integration-tests:
-    type: boolean
-    default: false
-  dev-orb-version:
-    type: string
-    default: "dev:alpha"
-
-jobs:
-  test-install-cli:
-    parameters:
-      executor:
-        type: executor
-        default: orb-tools/ubuntu
-      version-check-file:
-        type: string
-        default: /tmp/scanner-version-check.txt
-      cli-version:
-        type: string
-        default: 5.0.1.3006
-      os:
-        type: string
-        default: linux
-    executor: <<parameters.executor>>
-    steps:
-      - sonarcloud/install-cli:
-          cli-version: <<parameters.cli-version>>
-          os: <<parameters.os>>
-          output-file: <<parameters.version-check-file>>
-          no-cache: true
-      - run: grep "Scanner <<parameters.cli-version>>" <<parameters.version-check-file>>
-      - run:
-          name: Cleanup test files
-          command: rm <<parameters.version-check-file>>
+filters: &filters
+  tags:
+    only: /.*/
 
 workflows:
-  # This `lint-pack_validate_publish-dev` workflow will run on any commit.
-  lint_pack-validate_publish-dev:
-    unless: << pipeline.parameters.run-integration-tests >>
+  lint-pack:
     jobs:
-      - orb-tools/lint
-      # pack your orb YAML files to a single orb.yml
-      # validate the orb.yml file to ensure it is well-formed
+      - orb-tools/lint:
+          filters: *filters
       - orb-tools/pack:
+          filters: *filters
+      - orb-tools/review:
+          filters: *filters
+          exclude: "RC010,RC009"
+      - shellcheck/check:
+          filters: *filters
+      # Triggers the next workflow in the Orb Development Kit.
+      - orb-tools/continue:
+          pipeline_number: << pipeline.number >>
+          vcs_type: << pipeline.project.type >>
+          orb_name: sonarcloud
           requires:
-            - orb-tools/lint
-
-      # release dev version of orb, for testing & possible publishing.
-      # orb will be published as dev:alpha and dev:${CIRCLE_SHA1:0:7}.
-      # requires a CircleCI API token to be stored as CIRCLE_TOKEN (default)
-      # https://circleci.com/docs/2.0/managing-api-tokens
-      # store CIRCLE_TOKEN as a project env var or Contexts resource
-      # if using Contexts, add your context below
-      - orb-tools/publish-dev:
-          context: orbs-dev
-          orb-name: *orb-name
-          requires:
-            - orb-tools/pack
-
-      # trigger an integration workflow to test the
-      # dev:${CIRCLE_SHA1:0:7} version of your orb
-      - orb-tools/trigger-integration-tests-workflow:
-          name: trigger-integration-dev
-          context: orbs-publishing
-          requires:
-            - orb-tools/publish-dev
-
-  # This `integration-tests_prod-release` workflow will only run
-  # when the run-integration-tests pipeline parameter is set to true.
-  # It is meant to be triggered by the "trigger-integration-tests-workflow"
-  # job, and run tests on <your orb>@dev:${CIRCLE_SHA1:0:7}.
-  integration-tests_prod-release:
-    when: << pipeline.parameters.run-integration-tests >>
-    jobs:
-      # your integration test jobs go here: essentially, run all your orb's
-      # jobs and commands to ensure they behave as expected. or, run other
-      # integration tests of your choosing
-
-      # an example job
-      - test-install-cli
-
-      # publish a semver version of the orb. relies on
-      # the commit subject containing the text "[semver:patch|minor|major|skip]"
-      # as that will determine whether a patch, minor or major
-      # version will be published or if publishing should
-      # be skipped.
-      # e.g. [semver:patch] will cause a patch version to be published.
-      - orb-tools/dev-promote-prod-from-commit-subject:
-          orb-name: *orb-name
-          context: orbs-publishing
-          add-pr-comment: true
-          bot-token-variable: GITHUB_SOCIALTABLES_DEPLOYER_TOKEN
-          bot-user: socialtables-deployer
-          fail-if-semver-not-indicated: true
-          publish-version-tag: true
-          ssh-fingerprints: *ssh-fingerprints
-          requires:
-            - test-install-cli
-          filters:
-            branches:
-              only: master
+            [orb-tools/lint, orb-tools/pack, orb-tools/review, shellcheck/check]
+          filters: *filters
