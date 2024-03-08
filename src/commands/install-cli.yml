@@ -62,6 +62,7 @@ steps:
         sonar-scanner --version \
           <<#parameters.output-file>>| tee <<parameters.output-file>><</parameters.output-file>>;
 
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
       when: always
   - unless:
       condition: <<parameters.no-cache>>
